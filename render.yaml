@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: alliance-atc-runway-scheduler
+    env: python
+    plan: free
+    buildCommand: g++ -std=c++17 -O2 runway_engine.cpp -o runway_engine
+    startCommand: python3 server.py

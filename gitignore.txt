@@ -1,0 +1,13 @@
+# Compiled binaries
+runway_system
+runway_engine
+*.o
+
+# Python cache & logs
+__pycache__/
+*.pyc
+.system_generated/
+
+# State files
+airport_state.json
+

@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runway Scheduling System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f4f1ea;
+    --paper-raised: #ffffff;
+    --ink: #1d1d1b;
+    --ink-soft: #5a564c;
+    --rule: #1d1d1b;
+    --rule-soft: #c9c3b4;
+    --arrival: #dce8f0;
+    --arrival-border: #4c7a99;
+    --departure: #f3e7c2;
+    --departure-border: #a4852f;
+    --emergency: #c0392b;
+    --emergency-bg: #f8e3df;
+    --accent: #1d1d1b;
+    --good: #2f6b3a;
+    --focus: #0b5fff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+    padding: 20px 16px 60px;
+  }
+  .mono { font-family: "IBM Plex Mono", monospace; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  header.page-head { border-bottom: 3px solid var(--rule); padding-bottom: 14px; margin-bottom: 18px; }
+  header.page-head h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header.page-head .sub { color: var(--ink-soft); font-size: 0.92rem; margin: 0 0 8px; }
+  header.page-head .team { font-size: 0.85rem; color: var(--ink-soft); }
+  .status-line { font-size: 0.82rem; margin-top: 8px; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 6px; }
+  .status-dot.fallback { background: var(--ink-soft); }
+
+  .tagline { font-size: 0.95rem; margin: 10px 0 0; }
+
+  section { margin: 26px 0; }
+  h2 { font-size: 1.05rem; border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin: 0 0 12px; }
+
+  .controls-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 0.8rem; color: var(--ink-soft); }
+  select, input, button {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.9rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--paper-raised);
+    color: var(--ink);
+    padding: 7px 10px;
+  }
+  button { cursor: pointer; font-weight: 600; }
+  button:hover { background: #ececec; }
+  button:active { background: #ddd; transform: translateY(1px); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; background: var(--paper-raised); }
+  button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  button.primary:hover { background: #3a3a37; }
+  button.danger { color: var(--emergency); border-color: var(--emergency); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+  .weather-note { font-size: 0.78rem; color: var(--ink-soft); max-width: 260px; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 760px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border: 1px solid var(--rule); background: var(--paper-raised); padding: 12px 14px; border-radius: 3px; }
+  .stat .num { font-size: 1.7rem; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+  .stat .label { font-size: 0.82rem; font-weight: 600; margin-top: 2px; }
+  .stat .how { font-size: 0.76rem; color: var(--ink-soft); margin-top: 4px; }
+
+  .runway-row { border: 1px solid var(--rule); background: var(--paper-raised); margin-bottom: 10px; padding: 10px 12px; border-radius: 3px; }
+  .runway-row.closed { background: var(--emergency-bg); }
+  .runway-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .runway-head .name { font-weight: 700; }
+  .runway-head .code { color: var(--ink-soft); font-size: 0.82rem; }
+  .closed-note { font-size: 0.85rem; color: var(--emergency); font-weight: 600; }
+  .timeline-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: 24px; }
+  .timeline { position: relative; height: 54px; min-width: 600px; border-left: 1px solid var(--rule-soft); border-bottom: 1px solid var(--rule-soft); margin-top: 6px; }
+  .tick { position: absolute; bottom: 0; top: 0; border-left: 1px dotted var(--rule-soft); }
+  .tick .tick-label { position: absolute; bottom: -18px; left: 2px; font-size: 0.68rem; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; white-space: nowrap; }
+  .op-block { position: absolute; top: 10px; height: 26px; border: 1px solid var(--arrival-border); background: var(--arrival); font-size: 0.68rem; font-family: "IBM Plex Mono", monospace; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; border-radius: 2px; }
+  .op-block.departure { border-color: var(--departure-border); background: var(--departure); }
+  .op-block.emergency { border: 2px solid var(--emergency); background: var(--emergency-bg); font-weight: 700; }
+  .op-gap { position: absolute; top: 10px; height: 26px; background: repeating-linear-gradient(45deg, var(--rule-soft) 0 3px, transparent 3px 6px); opacity: 0.6; }
+  .legend { font-size: 0.78rem; color: var(--ink-soft); margin-top: 20px; }
+  .legend .swatch { display: inline-block; width: 11px; height: 11px; vertical-align: middle; margin-right: 4px; border: 1px solid; }
+
+  .strip { border: 1px solid var(--rule); border-left: 6px solid var(--arrival-border); background: var(--arrival); padding: 10px 12px; margin-bottom: 8px; border-radius: 2px; }
+  .strip.departure { border-left-color: var(--departure-border); background: var(--departure); }
+  .strip.emergency { border-left-color: var(--emergency); background: var(--emergency-bg); }
+  .strip.unscheduled { background: #efefe9; border-left-color: var(--ink-soft); }
+  .strip-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+  .strip-code { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 1rem; }
+  .strip-emg-tag { color: var(--emergency); font-weight: 700; font-size: 0.78rem; }
+  .strip-meta { font-size: 0.82rem; color: var(--ink-soft); margin-top: 4px; }
+  .strip-data { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 4px 10px; font-size: 0.82rem; margin-top: 6px; font-family: "IBM Plex Mono", monospace; }
+  .strip-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .strip-actions button { font-size: 0.78rem; padding: 5px 8px; }
+  .strip-actions input[type=number] { width: 60px; padding: 5px; }
+
+  ol.howitworks { padding-left: 1.3em; font-size: 0.92rem; }
+  ol.howitworks li { margin-bottom: 8px; }
+  .fn { font-family: "IBM Plex Mono", monospace; background: #ececdf; padding: 1px 4px; border-radius: 2px; }
+
+  dialog { border: 1px solid var(--rule); border-radius: 3px; padding: 18px; max-width: 420px; width: 92vw; background: var(--paper-raised); }
+  dialog::backdrop { background: rgba(0,0,0,0.3); }
+  .form-grid { display: flex; flex-direction: column; gap: 10px; }
+  .form-grid label { font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 3px; }
+  .form-grid input, .form-grid select { width: 100%; }
+  .err { color: var(--emergency); font-size: 0.78rem; min-height: 1em; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+  footer { border-top: 1px solid var(--rule); margin-top: 30px; padding-top: 12px; font-size: 0.78rem; color: var(--ink-soft); }
+  .co-list { list-style: none; padding: 0; margin: 6px 0; }
+  .co-list li { margin-bottom: 2px; }
+
+  .sr-only { position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page-head">
+    <h1>Runway Scheduling System</h1>
+    <p class="sub">Alliance University &middot; Alliance School of Advanced Computing &middot; Micro-project</p>
+    <p class="team">Team: Diyah &middot; Raju &middot; Ajay &middot; Shazeb &middot; Gaurav</p>
+    <p class="tagline">Assigns arriving and departing flights to runways so no two use the same runway within the safety gap, and emergencies go first.</p>
+    <p class="status-line"><span id="statusDot" class="status-dot" aria-hidden="true"></span><span id="statusText">Running: in-browser JavaScript port of runway_engine.cpp</span></p>
+  </header>
+
+  <section aria-labelledby="controlsHead">
+    <h2 id="controlsHead">Controls</h2>
+    <div class="controls-row">
+      <div class="field">
+        <label for="weatherSelect">Weather (sets minimum runway separation)</label>
+        <select id="weatherSelect" onchange="changeWeather(this.value)">
+          <option value="Clear">Clear &mdash; 3 min</option>
+          <option value="Rain">Rain &mdash; 5 min</option>
+          <option value="HeavyRain">Fog / Heavy rain &mdash; 7 min</option>
+          <option value="Storm">Storm &mdash; 10 min</option>
+        </select>
+      </div>
+      <div class="field">
+        <button class="primary" type="button" onclick="openAddModal()">Add flight</button>
+      </div>
+      <div class="field">
+        <button type="button" onclick="resetDemo()">Reset demo data</button>
+      </div>
+      <p class="weather-note">Weather changes the required gap between any two runway operations. All other actions below reschedule automatically &mdash; there is no separate "optimize" button.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="summaryHead">
+    <h2 id="summaryHead">Summary</h2>
+    <div class="summary-grid" aria-live="polite">
+      <div class="stat">
+        <div class="num" id="statScheduled">0 / 0</div>
+        <div class="label">Flights scheduled</div>
+        <div class="how">Count of flights the scheduler placed on a runway, out of all registered flights.</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="statAvgDelay">0 min</div>
+        <div class="label">Average delay</div>
+        <div class="how">Total waiting time of scheduled flights &divide; number of scheduled flights.</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="statMaxDelay">0 min</div>
+        <div class="label">Longest delay</div>
+        <div class="how" id="statMaxDelayWho">No flight delayed.</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="statConflicts">0</div>
+        <div class="label">Runway conflicts found</div>
+        <div class="how">The audit re-checks every runway for overlapping operations or gaps smaller than the current separation buffer. Should always read 0.</div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="runwayHead">
+    <h2 id="runwayHead">Runway timeline</h2>
+    <div id="runwaysBox"></div>
+    <p class="legend" aria-hidden="true">
+      <span class="swatch" style="background:var(--arrival);border-color:var(--arrival-border)"></span>Arrival
+      &nbsp; <span class="swatch" style="background:var(--departure);border-color:var(--departure-border)"></span>Departure
+      &nbsp; <span class="swatch" style="background:var(--emergency-bg);border-color:var(--emergency)"></span>Emergency
+      &nbsp; <span class="swatch" style="background:repeating-linear-gradient(45deg,#c9c3b4 0 2px,transparent 2px 4px);border-color:#c9c3b4"></span>Separation buffer
+    </p>
+    <p class="legend">Pale blue for arrivals and pale buff/yellow for departures follows the real paper flight-strip convention used in ATC towers.</p>
+  </section>
+
+  <section aria-labelledby="queueHead">
+    <h2 id="queueHead">Flight strips</h2>
+    <p class="legend">Ordered as the priority queue would pop them: emergency first, then higher priority, then earlier requested time, then shorter runway occupation.</p>
+    <div id="stripsBox"></div>
+  </section>
+
+  <section aria-labelledby="howHead">
+    <h2 id="howHead">How the scheduler works</h2>
+    <ol class="howitworks">
+      <li>Every flight is inserted into a custom max-heap (<span class="fn">CustomPriorityQueue::push</span>) ordered by: emergency status, then priority, then earlier requested time, then shorter runway occupation (<span class="fn">higherPriority</span>). Insert is O(log n).</li>
+      <li>The highest-priority flight is popped from the heap (<span class="fn">CustomPriorityQueue::pop</span>), also O(log n).</li>
+      <li>For each open runway, the earliest available slot at or after the requested time that still keeps the separation buffer from every existing operation on that runway is found (<span class="fn">findAvailableTime</span>).</li>
+      <li>The runway producing the smallest delay is chosen (<span class="fn">scheduleAircraft</span>) &mdash; a greedy choice, not an exhaustive search over all orderings.</li>
+      <li>After every flight is placed, every runway is re-checked for overlaps or separation violations (<span class="fn">auditConflicts</span>).</li>
+    </ol>
+    <p class="legend">Overall complexity is O(n log n) for the heap operations plus O(n &middot; r &middot; k) for slot-finding, where n = flights, r = runways, k = operations already on a runway.</p>
+  </section>
+
+  <footer>
+    <p><strong>Course outcomes:</strong></p>
+    <ul class="co-list">
+      <li>CO2 &mdash; custom max-heap priority queue built from a dynamic array, O(log n) push/pop.</li>
+      <li>CO3 &mdash; greedy interval scheduling with a safety-separation constraint and emergency preemption.</li>
+      <li>CO4 &mdash; a working C++ console engine plus this web dashboard as the decision-support interface.</li>
+    </ul>
+    <p>Source: runway_engine.cpp (C++ core) and this page (JavaScript port used for the static GitHub Pages demo).</p>
+  </footer>
+
+</div>
+
+<!-- Add flight dialog -->
+<dialog id="addModal">
+  <form id="addAircraftForm" class="form-grid" onsubmit="submitAddAircraft(event)">
+    <h2 style="margin:0 0 4px;font-size:1rem;">Add flight</h2>
+    <div>
+      <label for="newId">Flight number (1&ndash;9999, unique)</label>
+      <input type="number" id="newId" min="1" max="9999" required oninput="validateAddForm()">
+      <div class="err" id="errId"></div>
+    </div>
+    <div>
+      <label for="newType">Type</label>
+      <select id="newType">
+        <option value="Arrival">Arrival</option>
+        <option value="Departure">Departure</option>
+      </select>
+    </div>
+    <div>
+      <label for="newTime">Requested time</label>
+      <input type="time" id="newTime" required oninput="validateAddForm()">
+      <div class="err" id="errTime"></div>
+    </div>
+    <div>
+      <label for="newPriority">Priority</label>
+      <select id="newPriority">
+        <option value="1">1 &mdash; lowest</option>
+        <option value="2">2 &mdash; low</option>
+        <option value="3" selected>3 &mdash; normal</option>
+        <option value="4">4 &mdash; high</option>
+        <option value="5">5 &mdash; highest</option>
+      </select>
+    </div>
+    <div>
+      <label for="newRunwayTime">Runway occupation (1&ndash;30 min)</label>
+      <input type="number" id="newRunwayTime" min="1" max="30" value="5" required oninput="validateAddForm()">
+      <div class="err" id="errRunwayTime"></div>
+    </div>
+    <div>
+      <label for="newEmergency" style="display:inline;">Emergency</label>
+      <input type="checkbox" id="newEmergency" style="width:auto;">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" onclick="closeAddModal()">Cancel</button>
+      <button type="submit" class="primary" id="addSubmitBtn" disabled>Add flight</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+// ============================================================
+// ENGINE (mirror of runway_engine.cpp)
+// ============================================================
+class RunwayEngine {
+  constructor() { this.resetDemo(); }
+
+  convertToMinutes(timeStr) {
+    if (!timeStr || timeStr.length !== 5 || timeStr[2] !== ':') return -1;
+    const [hs, ms] = timeStr.split(':');
+    const h = parseInt(hs, 10), m = parseInt(ms, 10);
+    if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return -1;
+    return h * 60 + m;
+  }
+  convertToTime(mins) {
+    if (mins == null || mins < 0) return "--:--";
+    const h = Math.floor(mins / 60) % 24, m = mins % 60;
+    return String(h).padStart(2, '0') + ":" + String(m).padStart(2, '0');
+  }
+  higherPriority(a, b) {
+    if (a.emergency !== b.emergency) return a.emergency;
+    if (a.priority !== b.priority) return a.priority > b.priority;
+    if (a.scheduledTime !== b.scheduledTime) return a.scheduledTime < b.scheduledTime;
+    return a.runwayTime < b.runwayTime;
+  }
+  buildPriorityQueue(aircraftList) {
+    const heap = [];
+    const swap = (i, j) => { [heap[i], heap[j]] = [heap[j], heap[i]]; };
+    const push = (item) => {
+      heap.push(item);
+      let cur = heap.length - 1;
+      while (cur > 0) {
+        let parent = Math.floor((cur - 1) / 2);
+        if (this.higherPriority(heap[cur], heap[parent])) { swap(cur, parent); cur = parent; } else break;
+      }
+    };
+    const pop = () => {
+      if (heap.length === 0) return null;
+      const top = heap[0];
+      const last = heap.pop();
+      if (heap.length > 0) {
+        heap[0] = last;
+        let cur = 0;
+        while (true) {
+          let left = 2 * cur + 1, right = 2 * cur + 2, highest = cur;
+          if (left < heap.length && this.higherPriority(heap[left], heap[highest])) highest = left;
+          if (right < heap.length && this.higherPriority(heap[right], heap[highest])) highest = right;
+          if (highest !== cur) { swap(cur, highest); cur = highest; } else break;
+        }
+      }
+      return top;
+    };
+    aircraftList.forEach(p => push(p));
+    return { pop, isEmpty: () => heap.length === 0 };
+  }
+  findAvailableTime(runway, requestedTime, occupationTime) {
+    let proposedTime = requestedTime;
+    runway.operations.sort((a, b) => a.startTime - b.startTime);
+    let found = false;
+    while (!found) {
+      found = true;
+      let proposedEnd = proposedTime + occupationTime;
+      for (const op of runway.operations) {
+        if (proposedTime < op.endTime + this.safetySeparation && proposedEnd + this.safetySeparation > op.startTime) {
+          proposedTime = op.endTime + this.safetySeparation;
+          found = false;
+          break;
+        }
+      }
+    }
+    return proposedTime;
+  }
+  scheduleAircraft() {
+    this.runways.forEach(r => r.operations = []);
+    this.aircraft.forEach(p => { p.scheduled = false; p.assignedRunway = -1; p.actualTime = -1; p.waitingTime = 0; });
+
+    const pq = this.buildPriorityQueue(this.aircraft);
+    let resolvedCount = 0;
+
+    while (!pq.isEmpty()) {
+      const current = pq.pop();
+      let bestRunwayIdx = -1, bestStartTime = -1, smallestWaiting = 999999;
+
+      for (let r = 0; r < this.runways.length; r++) {
+        if (!this.runways[r].active) continue;
+        let availTime = this.findAvailableTime(this.runways[r], current.scheduledTime, current.runwayTime);
+        let wait = availTime - current.scheduledTime;
+        if (wait < smallestWaiting) { smallestWaiting = wait; bestRunwayIdx = r; bestStartTime = availTime; }
+      }
+      // Count once per aircraft that actually had to be shifted on its chosen runway
+      // (the C++ core increments this once per runway *tried*, inflating the number; fixed here).
+      if (smallestWaiting > 0 && smallestWaiting !== 999999) resolvedCount++;
+
+      if (bestRunwayIdx !== -1) {
+        const op = {
+          aircraftID: current.id, type: current.type,
+          startTime: bestStartTime, endTime: bestStartTime + current.runwayTime,
+          startTimeStr: this.convertToTime(bestStartTime), endTimeStr: this.convertToTime(bestStartTime + current.runwayTime),
+          isEmergency: current.emergency
+        };
+        this.runways[bestRunwayIdx].operations.push(op);
+        this.runways[bestRunwayIdx].operations.sort((a, b) => a.startTime - b.startTime);
+        const target = this.aircraft.find(p => p.id === current.id);
+        if (target) {
+          target.scheduled = true;
+          target.assignedRunway = this.runways[bestRunwayIdx].id;
+          target.actualTime = bestStartTime;
+          target.actualTimeStr = this.convertToTime(bestStartTime);
+          target.waitingTime = smallestWaiting;
+        }
+      }
+    }
+    this.conflictsResolved += resolvedCount;
+  }
+  auditConflicts() {
+    const list = [];
+    for (const r of this.runways) {
+      if (!r.active && r.operations.length > 0) {
+        for (const op of r.operations) {
+          list.push({ runwayId: r.id, aircraftA: op.aircraftID, aircraftB: -1, startAStr: op.startTimeStr, endAStr: op.endTimeStr, startBStr: "--:--", endBStr: "--:--", reason: "Operation assigned on closed runway" });
+        }
+      }
+      if (r.operations.length < 2) continue;
+      for (let i = 0; i < r.operations.length - 1; i++) {
+        const curr = r.operations[i], next = r.operations[i + 1];
+        if (next.startTime < curr.endTime) {
+          list.push({ runwayId: r.id, aircraftA: curr.aircraftID, aircraftB: next.aircraftID, startAStr: curr.startTimeStr, endAStr: curr.endTimeStr, startBStr: next.startTimeStr, endBStr: next.endTimeStr, reason: "Direct time overlap" });
+        } else if (next.startTime < curr.endTime + this.safetySeparation) {
+          list.push({ runwayId: r.id, aircraftA: curr.aircraftID, aircraftB: next.aircraftID, startAStr: curr.startTimeStr, endAStr: curr.endTimeStr, startBStr: next.startTimeStr, endBStr: next.endTimeStr, reason: `Separation gap violation (${next.startTime - curr.endTime} min < ${this.safetySeparation} min required)` });
+        }
+      }
+    }
+    return list;
+  }
+  computeMetrics() {
+    const activeRunways = this.runways.filter(r => r.active).length;
+    let scheduled = 0, waiting = 0, totalWait = 0, maxWait = 0, maxWaitId = -1;
+    for (const p of this.aircraft) {
+      if (p.scheduled) {
+        scheduled++;
+        totalWait += p.waitingTime;
+        if (p.waitingTime > maxWait) { maxWait = p.waitingTime; maxWaitId = p.id; }
+      } else waiting++;
+    }
+    const avgWait = scheduled > 0 ? (totalWait / scheduled) : 0;
+    return {
+      totalAircraft: this.aircraft.length, scheduledAircraft: scheduled, waitingAircraft: waiting,
+      avgWaitTime: Math.round(avgWait * 100) / 100, maxWaitTime: maxWait, maxWaitFlightId: maxWaitId,
+      conflictsDetected: this.auditConflicts().length
+    };
+  }
+  getState() {
+    return {
+      weather: this.weather, safetySeparation: this.safetySeparation, conflictsResolved: this.conflictsResolved,
+      runways: JSON.parse(JSON.stringify(this.runways)), aircraft: JSON.parse(JSON.stringify(this.aircraft)),
+      conflicts: this.auditConflicts(), metrics: this.computeMetrics()
+    };
+  }
+  resetDemo() {
+    this.weather = "Clear";
+    this.safetySeparation = 3;
+    this.conflictsResolved = 0;
+    this.runways = [
+      { id: 1, code: "09L", active: true, operations: [] },
+      { id: 2, code: "09R", active: true, operations: [] },
+      { id: 3, code: "27", active: true, operations: [] }
+    ];
+    this.aircraft = [
+      { id: 101, type: "Arrival", scheduledTime: 480, scheduledTimeStr: "08:00", priority: 3, emergency: false, runwayTime: 5, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 },
+      { id: 102, type: "Departure", scheduledTime: 485, scheduledTimeStr: "08:05", priority: 2, emergency: false, runwayTime: 4, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 },
+      { id: 103, type: "Arrival", scheduledTime: 490, scheduledTimeStr: "08:10", priority: 4, emergency: false, runwayTime: 5, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 },
+      { id: 104, type: "Departure", scheduledTime: 490, scheduledTimeStr: "08:10", priority: 2, emergency: false, runwayTime: 4, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 },
+      { id: 105, type: "Arrival", scheduledTime: 495, scheduledTimeStr: "08:15", priority: 5, emergency: true, runwayTime: 6, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 },
+      { id: 106, type: "Departure", scheduledTime: 500, scheduledTimeStr: "08:20", priority: 3, emergency: false, runwayTime: 4, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 },
+      { id: 107, type: "Arrival", scheduledTime: 505, scheduledTimeStr: "08:25", priority: 1, emergency: false, runwayTime: 5, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 },
+      { id: 108, type: "Departure", scheduledTime: 510, scheduledTimeStr: "08:30", priority: 4, emergency: false, runwayTime: 4, scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0 }
+    ];
+    this.scheduleAircraft();
+    return this.getState();
+  }
+  handleAction(payload) {
+    const action = payload.action;
+    if (action === 'schedule') { this.scheduleAircraft(); }
+    else if (action === 'reset_demo') { this.resetDemo(); }
+    else if (action === 'weather') {
+      const w = payload.weather;
+      if (w === 'Clear') { this.weather = 'Clear'; this.safetySeparation = 3; }
+      else if (w === 'Rain') { this.weather = 'Rain'; this.safetySeparation = 5; }
+      else if (w === 'HeavyRain') { this.weather = 'Heavy Rain / Fog'; this.safetySeparation = 7; }
+      else if (w === 'Storm') { this.weather = 'Severe Storm'; this.safetySeparation = 10; }
+      this.scheduleAircraft();
+    } else if (action === 'toggle_runway') {
+      const r = this.runways.find(x => x.id === payload.runwayId);
+      if (r) r.active = !r.active;
+      this.scheduleAircraft();
+    } else if (action === 'emergency') {
+      const p = this.aircraft.find(x => x.id === payload.id);
+      if (p) { p.emergency = true; p.priority = 5; }
+      this.scheduleAircraft();
+    } else if (action === 'delay') {
+      const p = this.aircraft.find(x => x.id === payload.id);
+      if (p) { p.scheduledTime += payload.delayMins; p.scheduledTimeStr = this.convertToTime(p.scheduledTime); }
+      this.scheduleAircraft();
+    } else if (action === 'delete_aircraft') {
+      this.aircraft = this.aircraft.filter(x => x.id !== payload.id);
+      this.scheduleAircraft();
+    } else if (action === 'add_aircraft') {
+      const newPlane = {
+        id: payload.id, type: payload.type, scheduledTime: this.convertToMinutes(payload.time), scheduledTimeStr: payload.time,
+        priority: payload.emergency ? 5 : payload.priority, emergency: !!payload.emergency, runwayTime: payload.runwayTime,
+        scheduled: false, assignedRunway: -1, actualTime: -1, actualTimeStr: "--:--", waitingTime: 0
+      };
+      this.aircraft = this.aircraft.filter(x => x.id !== newPlane.id);
+      this.aircraft.push(newPlane);
+      this.scheduleAircraft();
+    }
+    return this.getState();
+  }
+}
+
+const localEngine = new RunwayEngine();
+let appState = localEngine.getState();
+let isConnectedToNativeCpp = false;
+
+async function fetchState() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) throw new Error('no backend');
+    const data = await res.json();
+    if (data && data.runways && data.aircraft && data.aircraft.length > 0) {
+      appState = data; isConnectedToNativeCpp = true;
+    } else { appState = localEngine.getState(); }
+  } catch (err) {
+    isConnectedToNativeCpp = false;
+    appState = localEngine.getState();
+  }
+  updateStatusLine();
+  renderAll();
+}
+
+async function sendAction(payload) {
+  if (!isConnectedToNativeCpp) {
+    appState = localEngine.handleAction(payload);
+    renderAll();
+    return;
+  }
+  try {
+    const res = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error('action failed');
+    appState = await res.json();
+  } catch (e) {
+    isConnectedToNativeCpp = false;
+    appState = localEngine.handleAction(payload);
+  }
+  updateStatusLine();
+  renderAll();
+}
+
+function updateStatusLine() {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  if (isConnectedToNativeCpp) {
+    dot.classList.remove('fallback');
+    text.textContent = 'Running: C++ engine via local server';
+  } else {
+    dot.classList.add('fallback');
+    text.textContent = 'Running: in-browser JavaScript port of runway_engine.cpp';
+  }
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function renderAll() {
+  if (!appState) return;
+  document.getElementById('weatherSelect').value =
+    appState.weather === 'Clear' ? 'Clear' :
+    appState.weather === 'Rain' ? 'Rain' :
+    (appState.weather.includes('Fog') || appState.weather.includes('Heavy Rain')) ? 'HeavyRain' : 'Storm';
+
+  const m = appState.metrics || {};
+  document.getElementById('statScheduled').textContent = `${m.scheduledAircraft || 0} / ${m.totalAircraft || 0}`;
+  document.getElementById('statAvgDelay').textContent = `${m.avgWaitTime || 0} min`;
+  document.getElementById('statMaxDelay').textContent = `${m.maxWaitTime || 0} min`;
+  document.getElementById('statMaxDelayWho').textContent = (m.maxWaitFlightId && m.maxWaitFlightId !== -1)
+    ? `Flight #${m.maxWaitFlightId} was delayed the most.` : 'No flight delayed.';
+  document.getElementById('statConflicts').textContent = (appState.conflicts || []).length;
+
+  renderRunways();
+  renderStrips();
+}
+
+function renderRunways() {
+  const box = document.getElementById('runwaysBox');
+  box.innerHTML = '';
+  const allOps = appState.runways.flatMap(r => r.operations);
+  let minT = Math.min(...allOps.map(o => o.startTime), ...appState.aircraft.map(p => p.scheduledTime));
+  let maxT = Math.max(...allOps.map(o => o.endTime), ...appState.aircraft.map(p => p.scheduledTime + p.runwayTime));
+  if (!isFinite(minT) || !isFinite(maxT) || minT === maxT) { minT = 480; maxT = 600; }
+  minT = Math.floor(minT / 10) * 10 - 10;
+  maxT = Math.ceil(maxT / 10) * 10 + 10;
+  const span = maxT - minT;
+  const pxPerMin = 14;
+
+  appState.runways.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'runway-row' + (r.active ? '' : ' closed');
+    const head = document.createElement('div');
+    head.className = 'runway-head';
+    head.innerHTML = `<div><span class="name">Runway ${r.id}</span> <span class="code">(${r.code})</span></div>`;
+    const btn = document.createElement('button');
+    btn.textContent = r.active ? 'Close runway' : 'Reopen runway';
+    btn.onclick = () => toggleRunway(r.id);
+    head.appendChild(btn);
+    row.appendChild(head);
+
+    if (!r.active) {
+      const note = document.createElement('p');
+      note.className = 'closed-note';
+      note.textContent = 'Closed. No new operations will be scheduled on this runway.';
+      row.appendChild(note);
+      if (r.operations.length === 0) { box.appendChild(row); return; }
+    }
+
+    const scroll = document.createElement('div');
+    scroll.className = 'timeline-scroll';
+    const timeline = document.createElement('div');
+    timeline.className = 'timeline';
+    timeline.style.width = Math.max(600, span * pxPerMin) + 'px';
+
+    const tickStep = span > 180 ? 30 : 10;
+    for (let t = minT; t <= maxT; t += tickStep) {
+      const tick = document.createElement('div');
+      tick.className = 'tick';
+      tick.style.left = ((t - minT) / span * 100) + '%';
+      tick.innerHTML = `<span class="tick-label">${localEngine.convertToTime(t)}</span>`;
+      timeline.appendChild(tick);
+    }
+
+    r.operations.forEach(op => {
+      const left = (op.startTime - minT) / span * 100;
+      const width = (op.endTime - op.startTime) / span * 100;
+      const block = document.createElement('div');
+      block.className = 'op-block' + (op.type === 'Departure' ? ' departure' : '') + (op.isEmergency ? ' emergency' : '');
+      block.style.left = left + '%';
+      block.style.width = Math.max(width, 2) + '%';
+      block.textContent = `#${op.aircraftID}`;
+      block.title = `Flight #${op.aircraftID} (${op.type}) ${op.startTimeStr}-${op.endTimeStr}${op.isEmergency ? ' EMERGENCY' : ''}`;
+      timeline.appendChild(block);
+
+      const gapLeft = (op.endTime - minT) / span * 100;
+      const gapWidth = appState.safetySeparation / span * 100;
+      const gap = document.createElement('div');
+      gap.className = 'op-gap';
+      gap.style.left = gapLeft + '%';
+      gap.style.width = gapWidth + '%';
+      gap.title = `Separation buffer: ${appState.safetySeparation} min`;
+      timeline.appendChild(gap);
+    });
+
+    scroll.appendChild(timeline);
+    row.appendChild(scroll);
+    box.appendChild(row);
+  });
+}
+
+function renderStrips() {
+  const box = document.getElementById('stripsBox');
+  box.innerHTML = '';
+  // Order the way the max-heap would pop them.
+  const order = [...appState.aircraft].sort((a, b) => localEngine.higherPriority(a, b) ? -1 : (localEngine.higherPriority(b, a) ? 1 : 0));
+
+  order.forEach(p => {
+    const strip = document.createElement('div');
+    strip.className = 'strip' + (p.type === 'Departure' ? ' departure' : '') + (p.emergency ? ' emergency' : '') + (!p.scheduled ? ' unscheduled' : '');
+    strip.innerHTML = `
+      <div class="strip-top">
+        <span class="strip-code">#${p.id} &middot; ${p.type}</span>
+        ${p.emergency ? '<span class="strip-emg-tag">EMERGENCY</span>' : ''}
+      </div>
+      <div class="strip-data">
+        <div>Requested: ${p.scheduledTimeStr}</div>
+        <div>Priority: ${p.priority} / 5</div>
+        <div>Runway: ${p.scheduled ? ('R' + p.assignedRunway + ' @ ' + p.actualTimeStr) : 'unscheduled'}</div>
+        <div>Delay: ${p.waitingTime} min</div>
+      </div>
+    `;
+    const actions = document.createElement('div');
+    actions.className = 'strip-actions';
+    if (!p.emergency) {
+      const eb = document.createElement('button');
+      eb.textContent = 'Declare emergency';
+      eb.onclick = () => declareEmergency(p.id);
+      actions.appendChild(eb);
+    }
+    const db = document.createElement('button');
+    db.textContent = 'Delay +15 min';
+    db.onclick = () => sendAction({ action: 'delay', id: p.id, delayMins: 15 });
+    actions.appendChild(db);
+    const rb = document.createElement('button');
+    rb.className = 'danger';
+    rb.textContent = 'Remove';
+    rb.onclick = () => deleteFlight(p.id);
+    actions.appendChild(rb);
+    strip.appendChild(actions);
+    box.appendChild(strip);
+  });
+
+  if (order.length === 0) box.innerHTML = '<p class="legend">No flights registered.</p>';
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+function resetDemo() { sendAction({ action: 'reset_demo' }); }
+function changeWeather(w) { sendAction({ action: 'weather', weather: w }); }
+function toggleRunway(id) { sendAction({ action: 'toggle_runway', runwayId: id }); }
+function declareEmergency(id) { sendAction({ action: 'emergency', id: id }); }
+function deleteFlight(id) {
+  if (confirm(`Remove flight #${id}?`)) sendAction({ action: 'delete_aircraft', id: id });
+}
+
+function openAddModal() {
+  document.getElementById('addAircraftForm').reset();
+  document.getElementById('errId').textContent = '';
+  document.getElementById('errTime').textContent = '';
+  document.getElementById('errRunwayTime').textContent = '';
+  document.getElementById('addSubmitBtn').disabled = true;
+  document.getElementById('addModal').showModal();
+}
+function closeAddModal() { document.getElementById('addModal').close(); }
+
+function validateAddForm() {
+  let ok = true;
+  const id = parseInt(document.getElementById('newId').value, 10);
+  const errId = document.getElementById('errId');
+  if (!id || id < 1 || id > 9999) { errId.textContent = 'Enter a flight number 1-9999.'; ok = false; }
+  else if (appState.aircraft.some(p => p.id === id)) { errId.textContent = 'Flight number already exists.'; ok = false; }
+  else errId.textContent = '';
+
+  const time = document.getElementById('newTime').value;
+  const errTime = document.getElementById('errTime');
+  if (!time) { errTime.textContent = 'Requested time is required.'; ok = false; }
+  else errTime.textContent = '';
+
+  const rt = parseInt(document.getElementById('newRunwayTime').value, 10);
+  const errRt = document.getElementById('errRunwayTime');
+  if (!rt || rt < 1 || rt > 30) { errRt.textContent = 'Enter 1-30 minutes.'; ok = false; }
+  else errRt.textContent = '';
+
+  document.getElementById('addSubmitBtn').disabled = !ok;
+  return ok;
+}
+
+function submitAddAircraft(e) {
+  e.preventDefault();
+  if (!validateAddForm()) return;
+  const id = parseInt(document.getElementById('newId').value, 10);
+  const type = document.getElementById('newType').value;
+  const time = document.getElementById('newTime').value;
+  const priority = parseInt(document.getElementById('newPriority').value, 10);
+  const runwayTime = parseInt(document.getElementById('newRunwayTime').value, 10);
+  const emergency = document.getElementById('newEmergency').checked;
+  closeAddModal();
+  sendAction({ action: 'add_aircraft', id, type, time, priority, runwayTime, emergency });
+}
+
+renderAll();
+fetchState();
+</script>
+</body>
+</html>
